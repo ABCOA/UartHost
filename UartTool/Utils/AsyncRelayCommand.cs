@@ -17,7 +17,7 @@ namespace UartTool.Utils
 
         public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
 
-        public async void Execute(object? parameter) // 只有 ICommand 接口是 void，我们内部把异常吃掉，转为日志
+        public async void Execute(object? parameter)
         {
             try
             {
@@ -25,7 +25,6 @@ namespace UartTool.Utils
             }
             catch (Exception ex)
             {
-                // 这里不要再 throw，避免进程崩溃；改为记录日志或弹提示（由外层 VM 统一处理更好）
                 System.Diagnostics.Debug.WriteLine("AsyncRelayCommand Error: " + ex);
             }
         }
