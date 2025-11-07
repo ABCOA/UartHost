@@ -1,0 +1,117 @@
+﻿<Window x:Class="UartTool.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="UART 上位机" Height="680" Width="1200" WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <Style x:Key="HStackChildMargin" TargetType="FrameworkElement">
+      <Setter Property="Margin" Value="0,0,10,0"/>
+    </Style>
+    <Style x:Key="VStackChildMargin" TargetType="FrameworkElement">
+      <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <!-- 串口配置区 -->
+    <Border Padding="10" BorderThickness="1" BorderBrush="#DDD" CornerRadius="8">
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="端口" VerticalAlignment="Center" Style="{StaticResource HStackChildMargin}"/>
+        <ComboBox Width="120" ItemsSource="{Binding PortNames}" SelectedItem="{Binding SelectedPort}" Style="{StaticResource HStackChildMargin}"/>
+        
+        <TextBlock Text="波特率" VerticalAlignment="Center" Style="{StaticResource HStackChildMargin}"/>
+        <ComboBox Width="100" ItemsSource="{Binding BaudRates}" SelectedItem="{Binding SelectedBaudRate}" Style="{StaticResource HStackChildMargin}"/>
+
+        <TextBlock Text="数据位" VerticalAlignment="Center" Style="{StaticResource HStackChildMargin}"/>
+        <ComboBox Width="80" ItemsSource="{Binding DataBitsList}" SelectedItem="{Binding SelectedDataBits}" Style="{StaticResource HStackChildMargin}"/>
+
+        <TextBlock Text="校验" VerticalAlignment="Center" Style="{StaticResource HStackChildMargin}"/>
+        <ComboBox Width="100" ItemsSource="{Binding ParityList}" SelectedItem="{Binding SelectedParity}" Style="{StaticResource HStackChildMargin}"/>
+
+        <TextBlock Text="停止位" VerticalAlignment="Center" Style="{StaticResource HStackChildMargin}"/>
+        <ComboBox Width="100" ItemsSource="{Binding StopBitsList}" SelectedItem="{Binding SelectedStopBits}" Style="{StaticResource HStackChildMargin}"/>
+
+        <Button Content="刷新端口" Command="{Binding RefreshPortsCommand}" Style="{StaticResource HStackChildMargin}"/>
+        <Button Content="{Binding ConnectButtonText}" Command="{Binding ConnectCommand}" Style="{StaticResource HStackChildMargin}"/>
+
+        <CheckBox Content="HEX收发" IsChecked="{Binding HexMode}" Style="{StaticResource HStackChildMargin}"/>
+        <CheckBox Content="显示时间戳" IsChecked="{Binding ShowTimestamp}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- 收发区 -->
+    <Grid Grid.Row="1" Margin="0,10,0,10">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="360"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- 日志显示 -->
+      <Border BorderThickness="1" BorderBrush="#DDD" CornerRadius="8" Padding="8" Margin="0,0,10,0">
+        <DockPanel>
+          <TextBlock Text="通信日志" FontWeight="Bold" Margin="0,0,0,6"/>
+          <ScrollViewer DockPanel.Dock="Bottom" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding LogLines}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock FontFamily="Consolas" Text="{Binding}"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <!-- 发送与帧工具 -->
+      <StackPanel Grid.Column="1">
+        <TextBlock Text="发送区" FontWeight="Bold" Style="{StaticResource VStackChildMargin}"/>
+        <TextBox AcceptsReturn="True" Height="180" TextWrapping="Wrap"
+                 Text="{Binding SendText, UpdateSourceTrigger=PropertyChanged}"
+                 FontFamily="Consolas" Style="{StaticResource VStackChildMargin}"/>
+        <StackPanel Orientation="Horizontal" Style="{StaticResource VStackChildMargin}">
+          <CheckBox Content="追加&#10;" IsChecked="{Binding AppendNewLine}" Style="{StaticResource HStackChildMargin}"/>
+          <Button Content="发送" Command="{Binding SendCommand}" Style="{StaticResource HStackChildMargin}"/>
+          <Button Content="清空发送" Command="{Binding ClearSendCommand}"/>
+        </StackPanel>
+
+        <Separator Style="{StaticResource VStackChildMargin}"/>
+
+        <TextBlock Text="帧组包（可选）" FontWeight="Bold" Style="{StaticResource VStackChildMargin}"/>
+        <StackPanel Orientation="Vertical" Style="{StaticResource VStackChildMargin}">
+          <StackPanel Orientation="Vertical" Style="{StaticResource VStackChildMargin}">
+            <TextBlock Text="起始符（HEX，如 AA55）" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding FrameHeaderHex}"/>
+          </StackPanel>
+
+          <StackPanel Orientation="Vertical" Style="{StaticResource VStackChildMargin}">
+            <TextBlock Text="结束符（HEX，可留空）" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding FrameTailHex}"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Style="{StaticResource VStackChildMargin}">
+            <CheckBox Content="尾随 CRC16" IsChecked="{Binding UseCrc16}" Style="{StaticResource VStackChildMargin}"/>
+            <CheckBox Content="使用位数" IsChecked="{Binding UseLength}" Style="{StaticResource VStackChildMargin}"/>
+          </StackPanel>
+          <Button Content="用帧发送" Command="{Binding SendFramedCommand}"/>
+        </StackPanel>
+
+        <Separator Style="{StaticResource VStackChildMargin}"/>
+
+        <StackPanel Orientation="Horizontal" Style="{StaticResource VStackChildMargin}">
+          <Button Content="保存日志" Command="{Binding SaveLogCommand}" Style="{StaticResource HStackChildMargin}"/>
+          <Button Content="清空日志" Command="{Binding ClearLogCommand}"/>
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+
+    <!-- 状态栏 -->
+    <StatusBar Grid.Row="2">
+      <StatusBarItem Content="{Binding StatusText}"/>
+      <StatusBarItem Content="{Binding RxTxCounter}"/>
+    </StatusBar>
+  </Grid>
+</Window>
