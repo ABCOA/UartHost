@@ -18,6 +18,8 @@ namespace UartTool.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         
         public bool IsConnected => _serial.IsOpen;
+        public bool LED0 = false;
+        public bool LED1 = false;
         void OnPropertyChanged([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 
         // 串口参数
@@ -76,6 +78,8 @@ namespace UartTool.ViewModels
         void IncTx(long n) { _tx += n; OnPropertyChanged(nameof(RxTxCounter)); }
 
         public string ConnectButtonText => _serial.IsOpen ? "断开" : "连接";
+        public string LED0ButtonText => LED0 ? "LED0关" : "LED0开";
+        public string LED1ButtonText => LED1 ? "LED1关" : "LED1开";
 
         // 帧配置
         public string FrameHeaderHex { get; set; } = "";
@@ -89,6 +93,9 @@ namespace UartTool.ViewModels
         public AsyncRelayCommand SendCommand { get; }
         public AsyncRelayCommand SendFramedCommand { get; }
         public AsyncRelayCommand ClearSendCommand { get; }
+        public AsyncRelayCommand SendLED0ToggleCommand { get; }
+        public AsyncRelayCommand SendLED1ToggleCommand { get; }
+        
         public AsyncRelayCommand SaveLogCommand { get; }
         public AsyncRelayCommand ClearLogCommand { get; }
 
@@ -105,6 +112,8 @@ namespace UartTool.ViewModels
             ClearSendCommand    = new AsyncRelayCommand(_ => { SendText = ""; return Task.CompletedTask; });
             SaveLogCommand      = new AsyncRelayCommand(_ => { SaveLog(); return Task.CompletedTask; });
             ClearLogCommand     = new AsyncRelayCommand(_ => { LogLines.Clear(); return Task.CompletedTask; });
+            SendLED0ToggleCommand = new AsyncRelayCommand(async _ => await ToggleLed0Async(), _ => IsConnected);
+            SendLED1ToggleCommand = new AsyncRelayCommand(async _ => await ToggleLed1Async(), _ => IsConnected);
         }
 
         private void RefreshPorts()
@@ -119,7 +128,8 @@ namespace UartTool.ViewModels
         {
             SendCommand.RaiseCanExecuteChanged();
             SendFramedCommand.RaiseCanExecuteChanged();
-            // 需要的话其它命令也可根据状态变化
+            SendLED0ToggleCommand.RaiseCanExecuteChanged();
+            SendLED1ToggleCommand.RaiseCanExecuteChanged();
             OnPropertyChanged(nameof(ConnectButtonText));
             OnPropertyChanged(nameof(IsConnected));
         }
@@ -206,6 +216,55 @@ namespace UartTool.ViewModels
             }
         }
 
+        private async Task SendLedFrameAsync(byte cmd)
+        {
+            if (!_serial.IsOpen)
+            {
+                AppendLog("未连接，无法发送 LED 命令。");
+                return;
+            }
+
+            var frame = new MessageFrame
+            {
+                Header = new byte[] { 0xEF, 0x01 }, // 固定头
+                Tail = null, // 没有尾
+                UseCrc16 = true, // MCU 需要 CRC16
+                UseLength = true // MCU 需要长度
+            };
+
+            // payload: 00 00 00 XX
+            var payload = new byte[] { 0x00, 0x00, 0x00, cmd };
+
+            var bytes = frame.Pack(payload);
+
+            await _serial.WriteAsync(bytes);
+            IncTx(bytes.LongLength);
+            AppendLog($"TX(LED) {BitConverter.ToString(bytes).Replace("-", " ")}");
+        }
+
+        private async Task ToggleLed0Async()
+        {
+            bool turnOn = !LED0;
+
+            byte cmd = turnOn ? (byte)0x00 : (byte)0x01; // 0: ON, 1: OFF
+
+            await SendLedFrameAsync(cmd);
+
+            LED0 = turnOn;
+            OnPropertyChanged(nameof(LED0ButtonText)); // 通知按钮文字刷新
+        }
+
+        private async Task ToggleLed1Async()
+        {
+            bool turnOn = !LED1;
+
+            byte cmd = turnOn ? (byte)0x02 : (byte)0x03; // 2: ON, 3: OFF
+
+            await SendLedFrameAsync(cmd);
+
+            LED1 = turnOn;
+            OnPropertyChanged(nameof(LED1ButtonText));
+        }
 
         private void OnDataReceived(byte[] data)
         {

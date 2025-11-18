@@ -70,7 +70,7 @@
       <!-- 发送与帧工具 -->
       <StackPanel Grid.Column="1">
         <TextBlock Text="发送区" FontWeight="Bold" Style="{StaticResource VStackChildMargin}"/>
-        <TextBox AcceptsReturn="True" Height="180" TextWrapping="Wrap"
+        <TextBox AcceptsReturn="True" Height="100" TextWrapping="Wrap"
                  Text="{Binding SendText, UpdateSourceTrigger=PropertyChanged}"
                  FontFamily="Consolas" Style="{StaticResource VStackChildMargin}"/>
         <StackPanel Orientation="Horizontal" Style="{StaticResource VStackChildMargin}">
@@ -99,6 +99,17 @@
           <Button Content="用帧发送" Command="{Binding SendFramedCommand}"/>
         </StackPanel>
 
+        <Separator Style="{StaticResource VStackChildMargin}"/>
+        
+        <TextBlock Text="协议：EF 01 [LEN:2] [DATA:n] [CRC16:2]" FontWeight="Bold" Style="{StaticResource VStackChildMargin}"/>
+        <StackPanel Orientation="Vertical" Style="{StaticResource VStackChildMargin}">
+          <StackPanel Orientation="Horizontal" Style="{StaticResource VStackChildMargin}">
+            <Button Content="{Binding LED0ButtonText}" Command="{Binding SendLED0ToggleCommand}" Style="{StaticResource HStackChildMargin}"/>
+            <Button Content="{Binding LED1ButtonText}" Command="{Binding SendLED1ToggleCommand}" Style="{StaticResource HStackChildMargin}"/>
+          </StackPanel>
+          
+        </StackPanel>
+        
         <Separator Style="{StaticResource VStackChildMargin}"/>
 
         <StackPanel Orientation="Horizontal" Style="{StaticResource VStackChildMargin}">
