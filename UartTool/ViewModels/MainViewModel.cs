@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -20,6 +21,21 @@ namespace UartTool.ViewModels
         public bool IsConnected => _serial.IsOpen;
         public bool LED0 = false;
         public bool LED1 = false;
+        
+        private bool _hideBrightnessLog;
+        public bool HideBrightnessLog
+        {
+            get => _hideBrightnessLog;
+            set
+            {
+                _hideBrightnessLog = value;
+                OnPropertyChanged();
+            }
+        }
+        
+        private readonly object _rxLock = new();
+        private readonly List<byte> _rxBuffer = new();
+
         void OnPropertyChanged([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 
         // 串口参数
@@ -80,6 +96,35 @@ namespace UartTool.ViewModels
         public string ConnectButtonText => _serial.IsOpen ? "断开" : "连接";
         public string LED0ButtonText => LED0 ? "LED0关" : "LED0开";
         public string LED1ButtonText => LED1 ? "LED1关" : "LED1开";
+        
+        // 亮度显示
+        private int _brightnessRaw;
+        public int BrightnessRaw
+        {
+            get => _brightnessRaw;
+            set
+            {
+                _brightnessRaw = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BrightnessDisplay));
+            }
+        }
+
+        private double _brightnessVoltage;
+        public double BrightnessVoltage
+        {
+            get => _brightnessVoltage;
+            set
+            {
+                _brightnessVoltage = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BrightnessDisplay));
+            }
+        }
+        
+        public string BrightnessDisplay =>
+            $"{BrightnessVoltage:F3} V  (ADC={BrightnessRaw})";
+
 
         // 帧配置
         public string FrameHeaderHex { get; set; } = "";
@@ -269,8 +314,37 @@ namespace UartTool.ViewModels
         private void OnDataReceived(byte[] data)
         {
             IncRx(data.LongLength);
-            var s = HexMode ? BitConverter.ToString(data).Replace("-", " ") : Encoding.ASCII.GetString(data);
+
+            lock (_rxLock)
+            {
+                _rxBuffer.AddRange(data);
+                TryParseFramesFromMcu();
+            }
+            
+            if (HideBrightnessLog && IsBrightnessFrame(data))
+            {
+                return;
+            }
+
+            var s = HexMode
+                ? BitConverter.ToString(data).Replace("-", " ")
+                : Encoding.ASCII.GetString(data);
+
             AppendLog("RX " + s);
+        }
+        
+        private bool IsBrightnessFrame(byte[] data)
+        {
+            if (data == null) return false;
+            if (data.Length != 10) return false;
+
+            if (data[0] != 0xEF) return false;
+            if (data[1] != 0x01) return false;
+            if (data[2] != 0x00) return false;
+            if (data[3] != 0x0A) return false;
+            if (data[4] != 0x10) return false;
+
+            return true;
         }
 
         private void AppendLog(string line)
@@ -293,6 +367,92 @@ namespace UartTool.ViewModels
             if (hex.Length % 2 != 0) throw new Exception("HEX 长度必须为偶数");
             return Enumerable.Range(0, hex.Length / 2)
                     .Select(i => Convert.ToByte(hex.Substring(i * 2, 2), 16)).ToArray();
+        }
+        
+        private void TryParseFramesFromMcu()
+        {
+            // 帧格式：EF 01 [LenH] [LenL] [payload...] [CRC16_L] [CRC16_H]
+            while (_rxBuffer.Count >= 4)
+            {
+                int headerIndex = -1;
+                for (int i = 0; i < _rxBuffer.Count - 1; i++)
+                {
+                    if (_rxBuffer[i] == 0xEF && _rxBuffer[i + 1] == 0x01)
+                    {
+                        headerIndex = i;
+                        break;
+                    }
+                }
+
+                if (headerIndex < 0)
+                {
+                    _rxBuffer.Clear();
+                    return;
+                }
+
+                if (headerIndex > 0)
+                    _rxBuffer.RemoveRange(0, headerIndex);
+
+                if (_rxBuffer.Count < 4) return;
+
+                int len = (_rxBuffer[2] << 8) | _rxBuffer[3];
+
+                if (len < 6 || len > 1024)
+                {
+                    _rxBuffer.RemoveAt(0);
+                    continue;
+                }
+
+                if (_rxBuffer.Count < len) return;
+
+                byte[] frame = _rxBuffer.Take(len).ToArray();
+                _rxBuffer.RemoveRange(0, len);
+
+                int payloadLen = len - 6;
+                if (payloadLen <= 0) continue;
+
+                byte[] payload = new byte[payloadLen];
+                Array.Copy(frame, 4, payload, 0, payloadLen);
+
+                ushort crcRecv = (ushort)(frame[len - 2] | (frame[len - 1] << 8));
+                ushort crcCalc = BitConverter.ToUInt16(Crc16.ModbusBytesLE(payload), 0);
+
+                if (crcCalc != crcRecv)
+                {
+                    AppendLog("RX 帧 CRC 错误，已丢弃。");
+                    continue;
+                }
+
+                HandleFrameFromMcu(payload);
+            }
+        }
+        
+        private void HandleFrameFromMcu(byte[] payload)
+        {
+            if (payload.Length == 0) return;
+
+            byte cmd = payload[0];
+
+            switch (cmd)
+            {
+                case 0x10:
+                    if (payload.Length >= 4)
+                    {
+                        int adc = (payload[2] << 8) | payload[3];
+                        double voltage = adc * 3.3 / 4095.0;
+
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            BrightnessRaw = adc;
+                            BrightnessVoltage = voltage;
+                            if (!HideBrightnessLog)
+                            {
+                                AppendLog($"亮度更新: ADC={adc}, 电压={voltage:F3}V");
+                            }
+                        });
+                    }
+                    break;
+            }
         }
     }
 }
